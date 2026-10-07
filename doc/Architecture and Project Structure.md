@@ -262,7 +262,7 @@ The bridge connects to `/ws` with its `last_acked_seq`. The relay first sends ev
 | Unit | Fragment validation and diff on fixtures, including the `userId` / `user_id` case | `contract` |
 | Integration | Relay API with a temporary SQLite file: auth, routing, approvals binding, concurrent claims (first wins) | `relay` |
 | Integration | Bridge tools against an in-process relay through an in-memory MCP client | `bridge` |
-| End to end | Flow 3 and Flow 4 scripted with two bridges as two scripted "agents", one relay, approvals answered by a test harness; then offline delivery, auto-escalation and resume | `tests/e2e` |
+| End to end | The built CLI as real processes: `relay start`, `init`/`join`, bridges launched with the registered command, two MCP clients as agents answering approvals by elicitation. Covers the main flow, a rejected plan, the gap loop, a question, offline catch-up, auto-escalation, `resume` and `leave` | `tests/e2e` (`npm run test:e2e`) |
 | Manual | Milestone 1 exit criterion: one real feature integration between two machines with real agents | release checklist |
 
 ## Build order by milestone

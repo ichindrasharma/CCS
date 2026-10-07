@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { NOTIFICATIONS_ENV } from '@tool/protocol';
 
 export interface Notice {
   title: string;
@@ -29,8 +30,12 @@ $appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\power
 
 const MAC_NOTICE = 'display notification (system attribute "TOOL_NOTICE_MESSAGE") with title (system attribute "TOOL_NOTICE_TITLE") sound name "default"';
 
-/** Desktop notification on Windows, macOS and Linux; falls back to the terminal bell. */
+/**
+ * Desktop notification on Windows, macOS and Linux; falls back to the terminal bell.
+ * With NOTIFICATIONS_ENV=off it stays silent; approvals then need MCP elicitation.
+ */
 export function desktopNotifier(): Notifier {
+  if (process.env[NOTIFICATIONS_ENV] === 'off') return { notify() {} };
   return {
     notify({ title, message }) {
       const env = { ...process.env, TOOL_NOTICE_TITLE: title, TOOL_NOTICE_MESSAGE: message };

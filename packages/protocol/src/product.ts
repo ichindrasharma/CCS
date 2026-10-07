@@ -6,3 +6,6 @@ export const CLI_NAME = 'tool';
 
 /** The name the bridge is registered under in each agent's MCP configuration. */
 export const BRIDGE_SERVER_NAME = `${CLI_NAME}-bridge`;
+
+/** Set to `off` to silence the bridge's desktop notifications (CI, headless machines, tests). */
+export const NOTIFICATIONS_ENV = `${CLI_NAME.toUpperCase()}_NOTIFICATIONS`;
