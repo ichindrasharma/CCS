@@ -11,5 +11,14 @@
       "default": "./dist/index.js"
     }
   },
-  "dependencies": { "@tool/protocol": "*", "@tool/contract": "*" }
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@tool/protocol": "*",
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tool/relay": "^0.0.0",
+    "@types/ws": "^8.18.2"
+  }
 }

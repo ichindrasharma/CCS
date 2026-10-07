@@ -26,7 +26,7 @@ This document turns the spec into a code layout: which packages exist, what each
 | Database (relay and bridge cache) | SQLite through the built-in `node:sqlite` module, behind a repository interface | No native build step on install; `better-sqlite3` can be swapped in behind the same interface if needed |
 | Contract format | OpenAPI 3.1 fragments, validated with an OpenAPI schema validator | Spec decision #3 |
 | CLI | commander | Simple subcommands |
-| Notifications | `node-notifier` (desktop) with terminal bell fallback | Cross-platform |
+| Notifications | Built-in: PowerShell toast, `osascript`, `notify-send`; terminal bell fallback | No dependency; text passed by environment variable, never into a command |
 | Build | tsup (bundles internal packages into the published one) | One published package, fast builds |
 | Tests | vitest | Fast, TS-native |
 | Lint and format | Biome (added once there is more code) | One tool, fast |
@@ -167,22 +167,20 @@ Started by the agent as a stdio MCP server (`tool bridge`), so it lives as long 
 
 ```
 bridge/src/
-├─ main.ts                   # startBridge({ repoRoot }); reads repo and credential config
+├─ main.ts                   # createBridge(config) and runStdioBridge(repoRoot): wires everything below
+├─ config.ts                 # reads <repo>/.tool/config.json and the per-user token store
 ├─ mcp/
-│  ├─ server.ts              # registers only the tools allowed for this member's role
-│  ├─ tools/                 # one file per tool: input schema, pre-check, relay call, result
-│  ├─ descriptions.ts        # tool descriptions that tell the agent to plan and ask, not act
+│  ├─ tools.ts               # the role's tools: input schema, protocol pre-check, relay call, result
+│  │                         #   ending with the thread state and the tools allowed next
 │  └─ present.ts             # wraps incoming content as labelled, untrusted data
 ├─ relay-client/
-│  ├─ http.ts                # typed client generated from protocol/api.ts schemas
+│  ├─ http.ts                # typed client for the relay API (types from protocol/api.ts)
 │  └─ socket.ts              # WebSocket with reconnect, backoff and seq acks
 ├─ store/
-│  ├─ cache.ts               # local SQLite: thread snapshots, log copy, read marks
-│  └─ outbox.ts              # queued sends while the relay is unreachable; retried in order
-├─ approvals/
-│  ├─ elicit.ts              # MCP elicitation when the client supports it
-│  └─ fallback.ts            # show a one-time code by OS notification; wait for CLI decision
-├─ notify.ts                 # desktop or terminal notice on new inbox entries
+│  ├─ cache.ts               # local SQLite: threads, delivered entries and read marks, plans, outbox
+│  └─ outbox.ts              # queued sends while the relay is unreachable; sent in order on reconnect
+├─ approvals.ts              # MCP elicitation when supported, else one-time code by desktop notice
+├─ notify.ts                 # built-in desktop notice (Windows toast, macOS, Linux), bell fallback
 ├─ secrets.ts                # outgoing secret scan (Milestone 4)
 └─ codec/
    ├─ plain.ts               # Milestones 1–3: payload as JSON
