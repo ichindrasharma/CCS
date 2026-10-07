@@ -1,21 +1,8 @@
-import { newId, type ApprovalRef, type Gate } from '@tool/protocol';
+import { newId, type ApprovalRef, type ApprovalStatus, type ApprovalView, type Gate } from '@tool/protocol';
 import type { RelayDb } from '../database.js';
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'consumed';
-
-export interface Approval {
-  id: string;
-  threadId: string;
-  gate: Gate;
-  round: number;
-  memberId: string;
-  status: ApprovalStatus;
-  planHash: string;
-  note: string | null;
-  createdAt: string;
-  decidedAt: string | null;
-  consumedAt: string | null;
-}
+export type { ApprovalStatus };
+export type Approval = ApprovalView;
 
 interface Row {
   id: string;

@@ -1,32 +1,16 @@
-import { newId, type EventKind, type Header, type MessageType } from '@tool/protocol';
+import {
+  newId,
+  type EventEntry,
+  type EventKind,
+  type Header,
+  type LogEntry,
+  type MessageEntry,
+  type MessageType,
+} from '@tool/protocol';
 import type { RelayDb } from '../database.js';
 import type { ProjectsRepo } from './projects.js';
 
-interface Base {
-  projectId: string;
-  seq: number;
-  id: string;
-  threadId: string;
-  actor: string;
-  createdAt: string;
-}
-
-export interface MessageEntry extends Base {
-  kind: 'message';
-  type: MessageType;
-  header: Header;
-  /** JSON object, or a ciphertext string once payloads are encrypted. */
-  payload: Record<string, unknown> | string;
-  signature: string | null;
-}
-
-export interface EventEntry extends Base {
-  kind: 'event';
-  type: EventKind;
-  data: Record<string, unknown> | null;
-}
-
-export type LogEntry = MessageEntry | EventEntry;
+export type { EventEntry, LogEntry, MessageEntry };
 
 interface Row {
   project_id: string;
@@ -44,7 +28,7 @@ interface Row {
 }
 
 function toEntry(r: Row): LogEntry {
-  const base: Base = {
+  const base = {
     projectId: r.project_id,
     seq: r.seq,
     id: r.id,

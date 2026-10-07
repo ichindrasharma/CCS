@@ -11,5 +11,14 @@
       "default": "./dist/index.js"
     }
   },
-  "dependencies": { "@tool/protocol": "*", "@tool/contract": "*" }
+  "dependencies": {
+    "@fastify/websocket": "^11.3.3",
+    "@tool/contract": "*",
+    "@tool/protocol": "*",
+    "fastify": "^5.12.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
+  }
 }

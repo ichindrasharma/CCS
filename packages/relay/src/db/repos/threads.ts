@@ -1,17 +1,7 @@
-import { newId, type ThreadSnapshot, type ThreadState } from '@tool/protocol';
+import { newId, type ThreadSnapshot, type ThreadState, type ThreadView } from '@tool/protocol';
 import type { RelayDb } from '../database.js';
 
-export interface Thread {
-  id: string;
-  projectId: string;
-  title: string;
-  /** Member the requirements were addressed to; null means the backend role. */
-  addressedTo: string | null;
-  supersedes: string | null;
-  snapshot: ThreadSnapshot;
-  createdAt: string;
-  updatedAt: string;
-}
+export type Thread = ThreadView;
 
 interface Row {
   id: string;

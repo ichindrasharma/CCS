@@ -96,25 +96,19 @@ The agents still do the reasoning. This package gives them a mechanical check to
 
 ```
 relay/src/
-├─ main.ts                   # startRelay({ port, dataDir, publicMode })
+├─ main.ts                   # startRelay({ port, host, dataDir }); plain HTTP behind a TLS proxy
 ├─ http/
-│  ├─ server.ts              # Fastify setup, TLS options, auth hook
-│  └─ routes/
-│     ├─ projects.ts         # create project, create invite
-│     ├─ members.ts          # join, list, revoke, change role
-│     ├─ threads.ts          # list, get (log slice), resume
-│     ├─ messages.ts         # POST a message envelope
-│     └─ approvals.ts        # open, approve, reject, consume
+│  ├─ server.ts              # buildRelay(): Fastify, bearer-token hook, error mapping
+│  ├─ routes.ts              # every route in the table below
+│  └─ errors.ts              # protocol error codes → HTTP status, with code and state in the body
 ├─ ws/
-│  └─ delivery.ts            # per-member push of new log entries; cursor-based catch-up
+│  └─ hub.ts                 # live push, backlog after a cursor, acks, close on revoke
 ├─ auth/
-│  ├─ tokens.ts              # issue, hash (only hashes stored), verify, revoke
-│  └─ invites.ts             # single-use or limited-use invite codes with expiry
+│  └─ secrets.ts             # member tokens, invite codes, approval codes; only hashes stored
 ├─ domain/
-│  ├─ thread-service.ts      # load snapshot → protocol.transition → write log, in one transaction
-│  ├─ routing.ts             # who receives an entry: role inbox, owners, or project broadcast
-│  ├─ approvals.ts           # pending → approved | rejected → consumed; bound to thread, gate, round
-│  └─ signing.ts             # relay sets and signs header.from; agents' values are discarded
+│  ├─ thread-service.ts      # load snapshot → protocol.transition → write log, in one transaction;
+│  │                         #   also approvals (bound to thread, gate, round) and the relay-set `from`
+│  └─ routing.ts             # who receives an entry: role inbox, owners, or project broadcast
 └─ db/
    ├─ database.ts            # node:sqlite connection, pragmas, nested transactions (savepoints)
    ├─ migrations.ts          # append-only schema versions, tracked in PRAGMA user_version
@@ -141,23 +135,29 @@ One `log` table holds messages and events together, ordered by `seq`. That gives
 
 ### Relay API
 
-All requests carry `Authorization: Bearer <member token>` except create-project and join.
+All requests carry `Authorization: Bearer <member token>` except health, create-project and join. Request bodies are defined in `protocol/src/api.ts`, shared with the bridge. Errors return `{ error: { code, message, state } }`, keeping the protocol's error code and the thread's current state, so the agent can tell what to do next.
 
 | Method and path | Used by | Purpose |
 | --- | --- | --- |
-| `POST /projects` | CLI `init` | Create a project and the first member; returns token and invite code |
-| `POST /projects/:p/invites` | CLI | Create another invite code |
+| `GET /health` | anyone | Liveness check |
+| `POST /projects` | CLI `init` | Create a project and the first member; returns token and an invite code |
 | `POST /join` | CLI `join` | Redeem an invite; returns a member token |
-| `GET /projects/:p/members` | bridge, CLI | List members |
-| `PATCH /projects/:p/members/:m` | CLI | Change role, revoke (triggers `released` events) |
-| `GET /projects/:p/threads` | bridge, CLI | List threads with state and owners |
-| `GET /threads/:t/log?after=seq` | bridge, CLI | Thread history |
+| `GET /me` | bridge, CLI | The caller's member record and project |
+| `PATCH /me` | CLI | Change own role; releases threads owned under the old role |
+| `DELETE /me` | CLI | Leave the project: revokes the token, releases owned threads, closes sockets |
+| `POST /projects/:p/invites` | CLI | Create another invite code |
+| `GET /projects/:p/members` | bridge, CLI | List active members |
+| `GET /projects/:p/threads?state=` | bridge, CLI | List threads with state and owners |
+| `GET /threads/:t?after=seq` | bridge, CLI | A thread and its log |
+| `POST /messages` | bridge | Submit a draft envelope; the relay sets id, sender and time, checks the transition, then appends |
 | `POST /threads/:t/claim`, `/hand-off` | bridge | Ownership changes |
-| `POST /messages` | bridge | Submit an envelope; the relay validates header and transition, then appends |
-| `POST /approvals` | bridge | Open a pending approval for a gate; returns approval id |
-| `POST /approvals/:a/decide` | CLI, bridge (elicitation) | Approve or reject with the one-time code |
 | `POST /threads/:t/resume` | CLI | Resume an escalated thread, optionally `to` a state |
-| `GET /ws` | bridge | WebSocket: push of new log entries; client acks by seq |
+| `POST /approvals` | bridge | Open a pending approval for a gate; returns the approval and its one-time code |
+| `GET /approvals/:a` | bridge | Status of one of the caller's approvals |
+| `POST /approvals/:a/decide` | CLI, bridge (elicitation) | Approve or reject with the one-time code |
+| `GET /ws?after=seq` | bridge | WebSocket: `hello`, then every entry after the cursor, then live entries; client acks by seq |
+
+Removing other members (rather than leaving) is Milestone 4, with token revocation by an admin.
 
 The bridge never needs to accept a connection. All traffic is outbound from the bridge or CLI to the relay.
 

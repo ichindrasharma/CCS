@@ -1,14 +1,7 @@
-import { newId, type Role } from '@tool/protocol';
+import { newId, type MemberView, type Role } from '@tool/protocol';
 import type { RelayDb } from '../database.js';
 
-export interface Member {
-  id: string;
-  projectId: string;
-  name: string;
-  role: Role;
-  createdAt: string;
-  revokedAt: string | null;
-}
+export type Member = MemberView;
 
 interface Row {
   id: string;
