@@ -2,6 +2,7 @@ export * from './envelope.js';
 export * from './errors.js';
 export * from './events.js';
 export * from './gates.js';
+export * from './ids.js';
 export * from './machine.js';
 export * from './messages.js';
 export * from './roles.js';
