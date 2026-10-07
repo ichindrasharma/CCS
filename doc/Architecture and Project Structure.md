@@ -209,24 +209,16 @@ Two agent sessions in the same repo start two bridges with the same member token
 
 ```
 cli/src/
-├─ index.ts                  # commander entry; bin: tool
+├─ bin.ts                    # the executable: filters Node's SQLite warning, then runs the program
+├─ index.ts                  # the program as a library (tests, other tools)
+├─ program.ts                # commander: every command below, errors printed for people
+├─ context.ts                # terminal I/O, repo lookup, and the "must be a human" guard
 ├─ commands/
-│  ├─ relay-start.ts         # tool relay start [--port] [--data-dir]
-│  ├─ init.ts                # create project, write config, register agent
-│  ├─ join.ts                # redeem invite, write config, register agent
-│  ├─ members.ts
-│  ├─ threads.ts             # list threads, show one thread's log
-│  ├─ approve.ts             # tool approve <thread> --code <code>; tool reject … --note
-│  ├─ resume.ts              # tool resume <thread> [--to <state>]
-│  ├─ inbox.ts               # tool inbox [--hook]: unread summary; hook mode for adapters
-│  └─ bridge.ts              # tool bridge: start the MCP server (what agents launch)
-├─ config.ts                 # per-repo config: .tool/config.json
-├─ credentials.ts            # per-user token store
-└─ agents/                   # register the bridge with each agent
-   ├─ claude-code.ts
-   ├─ codex.ts
-   ├─ gemini-cli.ts
-   └─ generic.ts             # prints the MCP server entry for any other agent
+│  ├─ setup.ts               # relay start, init, join, invite, register, leave, bridge
+│  ├─ threads.ts             # members, threads, thread (decision trail), resume
+│  └─ approve.ts             # approve, reject: show the stored plan, need code and confirmation
+└─ agents/
+   └─ register.ts            # `claude mcp add --scope local`, or a config to paste into other agents
 ```
 
 ### Local files

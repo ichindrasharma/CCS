@@ -6,5 +6,6 @@ export * from './gates.js';
 export * from './ids.js';
 export * from './machine.js';
 export * from './messages.js';
+export * from './product.js';
 export * from './roles.js';
 export * from './states.js';

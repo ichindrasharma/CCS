@@ -1,3 +1,4 @@
-// The `tool` command.
-// Planned modules: doc/Architecture and Project Structure.md, "Package: cli".
-export {};
+// The `tool` command as a library; the executable is bin.ts.
+export { buildProgram, run } from './program.js';
+export type { Io } from './context.js';
+export { bridgeCommand, registerAgent, type Registration } from './agents/register.js';

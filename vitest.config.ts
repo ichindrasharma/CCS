@@ -11,6 +11,7 @@ export default defineConfig({
       '@tool/contract': pkg('contract'),
       '@tool/relay': pkg('relay'),
       '@tool/bridge': pkg('bridge'),
+      '@tool/cli': pkg('cli'),
     },
   },
   test: {
