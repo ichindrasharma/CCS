@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
+  CLI_NAME,
   GATE_ROLE,
   GATES,
   openSupersedingThread,
@@ -283,7 +284,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): ToolName[] {
               return `Your developer rejected the plan.${outcome.note ? ` Their note: ${outcome.note}` : ''} Revise it and call request_approval again.`;
             case 'pending':
               return (
-                `Still waiting for your developer (approval_id: ${outcome.approvalId}). They were notified on their desktop and approve with \`tool approve\`. ` +
+                `Still waiting for your developer (approval_id: ${outcome.approvalId}). They were notified on their desktop and approve with \`${CLI_NAME} approve\`. ` +
                 'Tell them it is waiting, then call request_approval with this approval_id to keep waiting. Do not continue without approval.'
               );
           }

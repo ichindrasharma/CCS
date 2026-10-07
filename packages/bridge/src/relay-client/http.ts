@@ -1,7 +1,10 @@
 import type {
   ApiError,
   ApprovalView,
+  CreateInviteRequest,
+  CreateProjectRequest,
   Gate,
+  JoinRequest,
   LogEntry,
   MemberView,
   ProjectView,
@@ -26,6 +29,19 @@ export class RelayUnreachable extends Error {}
 
 export type MessageDraft = z.input<typeof SubmitMessageRequest>;
 
+export interface Invite {
+  code: string;
+  expiresAt: string;
+  uses: number;
+}
+
+export interface Membership {
+  project: ProjectView;
+  member: MemberView;
+  /** Shown once; store it with saveCredential. */
+  token: string;
+}
+
 export interface Change {
   thread: ThreadView;
   entries: LogEntry[];
@@ -37,6 +53,29 @@ export class RelayClient {
     readonly baseUrl: string,
     private readonly token: string,
   ) {}
+
+  /** Creates a project and its first member (`init`). Needs no token. */
+  static createProject(baseUrl: string, body: z.input<typeof CreateProjectRequest>) {
+    return new RelayClient(baseUrl, '').request<Membership & { invite: Invite }>('POST', '/projects', body);
+  }
+
+  /** Redeems an invite code (`join`). Needs no token. */
+  static join(baseUrl: string, body: z.input<typeof JoinRequest>) {
+    return new RelayClient(baseUrl, '').request<Membership>('POST', '/join', body);
+  }
+
+  invite(projectId: string, body: z.input<typeof CreateInviteRequest> = {}) {
+    return this.request<Invite>('POST', `/projects/${projectId}/invites`, body);
+  }
+
+  resume(threadId: string, to?: ThreadState) {
+    return this.request<Change>('POST', `/threads/${threadId}/resume`, to ? { to } : {});
+  }
+
+  /** Revokes this member's own token and releases its threads. */
+  leave() {
+    return this.request<undefined>('DELETE', '/me');
+  }
 
   me() {
     return this.request<{ member: MemberView; project: ProjectView }>('GET', '/me');
@@ -78,13 +117,13 @@ export class RelayClient {
     return this.request<Change>('POST', `/approvals/${approvalId}/decide`, input);
   }
 
-  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
         method,
         headers: {
-          authorization: `Bearer ${this.token}`,
+          ...(this.token && { authorization: `Bearer ${this.token}` }),
           ...(method === 'POST' && { 'content-type': 'application/json' }),
         },
         ...(method === 'POST' && { body: JSON.stringify(body ?? {}) }),

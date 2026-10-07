@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { ApprovalView, Gate } from '@tool/protocol';
+import { CLI_NAME, type ApprovalView, type Gate } from '@tool/protocol';
 import type { Notifier } from './notify.js';
 import { RelayError, type RelayClient } from './relay-client/http.js';
 import type { BridgeCache } from './store/cache.js';
@@ -48,7 +48,7 @@ export class Approvals {
 
     this.o.notifier.notify({
       title: `Approval needed: ${GATE_LABEL[input.gate]}`,
-      message: `"${input.title}". Review the plan, then run: tool approve ${approval.id} --code ${code}`,
+      message: `"${input.title}". Review the plan, then run: ${CLI_NAME} approve ${approval.id} --code ${code}`,
     });
     return this.wait(approval.id);
   }

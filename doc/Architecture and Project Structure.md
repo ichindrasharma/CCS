@@ -209,24 +209,16 @@ Two agent sessions in the same repo start two bridges with the same member token
 
 ```
 cli/src/
-├─ index.ts                  # commander entry; bin: tool
+├─ bin.ts                    # the executable: filters Node's SQLite warning, then runs the program
+├─ index.ts                  # the program as a library (tests, other tools)
+├─ program.ts                # commander: every command below, errors printed for people
+├─ context.ts                # terminal I/O, repo lookup, and the "must be a human" guard
 ├─ commands/
-│  ├─ relay-start.ts         # tool relay start [--port] [--data-dir]
-│  ├─ init.ts                # create project, write config, register agent
-│  ├─ join.ts                # redeem invite, write config, register agent
-│  ├─ members.ts
-│  ├─ threads.ts             # list threads, show one thread's log
-│  ├─ approve.ts             # tool approve <thread> --code <code>; tool reject … --note
-│  ├─ resume.ts              # tool resume <thread> [--to <state>]
-│  ├─ inbox.ts               # tool inbox [--hook]: unread summary; hook mode for adapters
-│  └─ bridge.ts              # tool bridge: start the MCP server (what agents launch)
-├─ config.ts                 # per-repo config: .tool/config.json
-├─ credentials.ts            # per-user token store
-└─ agents/                   # register the bridge with each agent
-   ├─ claude-code.ts
-   ├─ codex.ts
-   ├─ gemini-cli.ts
-   └─ generic.ts             # prints the MCP server entry for any other agent
+│  ├─ setup.ts               # relay start, init, join, invite, register, leave, bridge
+│  ├─ threads.ts             # members, threads, thread (decision trail), resume
+│  └─ approve.ts             # approve, reject: show the stored plan, need code and confirmation
+└─ agents/
+   └─ register.ts            # `claude mcp add --scope local`, or a config to paste into other agents
 ```
 
 ### Local files
@@ -270,7 +262,7 @@ The bridge connects to `/ws` with its `last_acked_seq`. The relay first sends ev
 | Unit | Fragment validation and diff on fixtures, including the `userId` / `user_id` case | `contract` |
 | Integration | Relay API with a temporary SQLite file: auth, routing, approvals binding, concurrent claims (first wins) | `relay` |
 | Integration | Bridge tools against an in-process relay through an in-memory MCP client | `bridge` |
-| End to end | Flow 3 and Flow 4 scripted with two bridges as two scripted "agents", one relay, approvals answered by a test harness; then offline delivery, auto-escalation and resume | `tests/e2e` |
+| End to end | The built CLI as real processes: `relay start`, `init`/`join`, bridges launched with the registered command, two MCP clients as agents answering approvals by elicitation. Covers the main flow, a rejected plan, the gap loop, a question, offline catch-up, auto-escalation, `resume` and `leave` | `tests/e2e` (`npm run test:e2e`) |
 | Manual | Milestone 1 exit criterion: one real feature integration between two machines with real agents | release checklist |
 
 ## Build order by milestone

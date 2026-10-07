@@ -1,4 +1,4 @@
-import { allowedTools, NEXT_ACTOR, type LogEntry, type MemberView, type Role, type ThreadView } from '@tool/protocol';
+import { allowedTools, CLI_NAME, NEXT_ACTOR, type LogEntry, type MemberView, type Role, type ThreadView } from '@tool/protocol';
 
 const TAG = 'incoming_message';
 
@@ -38,7 +38,7 @@ export function presentState(thread: ThreadView, me: { id: string; role: Role },
   return (
     `Thread ${thread.id} "${neutralise(thread.title)}" is ${s.state} (round ${s.round}; ${owners}).${turn} ` +
     (next.length > 0 ? `You can call: ${next.join(', ')}.` : 'You have no actions on it now.') +
-    (s.state === 'escalated' ? ' A developer resumes it with `tool resume`.' : '')
+    (s.state === 'escalated' ? ` A developer resumes it with \`${CLI_NAME} resume\`.` : '')
   );
 }
 

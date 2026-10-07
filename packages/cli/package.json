@@ -11,5 +11,17 @@
       "default": "./dist/index.js"
     }
   },
-  "dependencies": { "@tool/protocol": "*", "@tool/relay": "*", "@tool/bridge": "*" }
+  "dependencies": {
+    "@tool/bridge": "*",
+    "@tool/protocol": "*",
+    "commander": "^14.0.3",
+    "zod": "^4.1.0"
+  },
+  "bin": {
+    "tool": "dist/bin.js"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@tool/relay": "^0.0.0"
+  }
 }

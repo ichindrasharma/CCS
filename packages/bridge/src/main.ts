@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import type { DeliveredEntry } from '@tool/protocol';
+import { BRIDGE_SERVER_NAME, type DeliveredEntry } from '@tool/protocol';
 import { Approvals } from './approvals.js';
 import { loadConfig, type BridgeConfig } from './config.js';
 import { registerTools } from './mcp/tools.js';
@@ -37,7 +37,7 @@ export function createBridge(config: BridgeConfig, options: BridgeOptions = {}):
   const notifier = options.notifier ?? desktopNotifier();
   const relay = new RelayClient(config.relayUrl, config.token);
   const cache = new BridgeCache(options.inMemoryCache ? ':memory:' : config.dataDir);
-  const server = new McpServer({ name: 'tool-bridge', version: '0.0.0' }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: BRIDGE_SERVER_NAME, version: '0.0.0' }, { instructions: INSTRUCTIONS });
   const approvals = new Approvals({
     relay,
     cache,
