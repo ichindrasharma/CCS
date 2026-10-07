@@ -1,12 +1,7 @@
-import { DEFAULT_LOOP_LIMIT, newId } from '@tool/protocol';
+import { DEFAULT_LOOP_LIMIT, newId, type ProjectView } from '@tool/protocol';
 import type { RelayDb } from '../database.js';
 
-export interface Project {
-  id: string;
-  name: string;
-  loopLimit: number;
-  createdAt: string;
-}
+export type Project = ProjectView;
 
 interface Row {
   id: string;

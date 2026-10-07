@@ -26,7 +26,7 @@ This document turns the spec into a code layout: which packages exist, what each
 | Database (relay and bridge cache) | SQLite through the built-in `node:sqlite` module, behind a repository interface | No native build step on install; `better-sqlite3` can be swapped in behind the same interface if needed |
 | Contract format | OpenAPI 3.1 fragments, validated with an OpenAPI schema validator | Spec decision #3 |
 | CLI | commander | Simple subcommands |
-| Notifications | `node-notifier` (desktop) with terminal bell fallback | Cross-platform |
+| Notifications | Built-in: PowerShell toast, `osascript`, `notify-send`; terminal bell fallback | No dependency; text passed by environment variable, never into a command |
 | Build | tsup (bundles internal packages into the published one) | One published package, fast builds |
 | Tests | vitest | Fast, TS-native |
 | Lint and format | Biome (added once there is more code) | One tool, fast |
@@ -96,25 +96,19 @@ The agents still do the reasoning. This package gives them a mechanical check to
 
 ```
 relay/src/
-├─ main.ts                   # startRelay({ port, dataDir, publicMode })
+├─ main.ts                   # startRelay({ port, host, dataDir }); plain HTTP behind a TLS proxy
 ├─ http/
-│  ├─ server.ts              # Fastify setup, TLS options, auth hook
-│  └─ routes/
-│     ├─ projects.ts         # create project, create invite
-│     ├─ members.ts          # join, list, revoke, change role
-│     ├─ threads.ts          # list, get (log slice), resume
-│     ├─ messages.ts         # POST a message envelope
-│     └─ approvals.ts        # open, approve, reject, consume
+│  ├─ server.ts              # buildRelay(): Fastify, bearer-token hook, error mapping
+│  ├─ routes.ts              # every route in the table below
+│  └─ errors.ts              # protocol error codes → HTTP status, with code and state in the body
 ├─ ws/
-│  └─ delivery.ts            # per-member push of new log entries; cursor-based catch-up
+│  └─ hub.ts                 # live push, backlog after a cursor, acks, close on revoke
 ├─ auth/
-│  ├─ tokens.ts              # issue, hash (only hashes stored), verify, revoke
-│  └─ invites.ts             # single-use or limited-use invite codes with expiry
+│  └─ secrets.ts             # member tokens, invite codes, approval codes; only hashes stored
 ├─ domain/
-│  ├─ thread-service.ts      # load snapshot → protocol.transition → write log, in one transaction
-│  ├─ routing.ts             # who receives an entry: role inbox, owners, or project broadcast
-│  ├─ approvals.ts           # pending → approved | rejected → consumed; bound to thread, gate, round
-│  └─ signing.ts             # relay sets and signs header.from; agents' values are discarded
+│  ├─ thread-service.ts      # load snapshot → protocol.transition → write log, in one transaction;
+│  │                         #   also approvals (bound to thread, gate, round) and the relay-set `from`
+│  └─ routing.ts             # who receives an entry: role inbox, owners, or project broadcast
 └─ db/
    ├─ database.ts            # node:sqlite connection, pragmas, nested transactions (savepoints)
    ├─ migrations.ts          # append-only schema versions, tracked in PRAGMA user_version
@@ -141,23 +135,29 @@ One `log` table holds messages and events together, ordered by `seq`. That gives
 
 ### Relay API
 
-All requests carry `Authorization: Bearer <member token>` except create-project and join.
+All requests carry `Authorization: Bearer <member token>` except health, create-project and join. Request bodies are defined in `protocol/src/api.ts`, shared with the bridge. Errors return `{ error: { code, message, state } }`, keeping the protocol's error code and the thread's current state, so the agent can tell what to do next.
 
 | Method and path | Used by | Purpose |
 | --- | --- | --- |
-| `POST /projects` | CLI `init` | Create a project and the first member; returns token and invite code |
-| `POST /projects/:p/invites` | CLI | Create another invite code |
+| `GET /health` | anyone | Liveness check |
+| `POST /projects` | CLI `init` | Create a project and the first member; returns token and an invite code |
 | `POST /join` | CLI `join` | Redeem an invite; returns a member token |
-| `GET /projects/:p/members` | bridge, CLI | List members |
-| `PATCH /projects/:p/members/:m` | CLI | Change role, revoke (triggers `released` events) |
-| `GET /projects/:p/threads` | bridge, CLI | List threads with state and owners |
-| `GET /threads/:t/log?after=seq` | bridge, CLI | Thread history |
+| `GET /me` | bridge, CLI | The caller's member record and project |
+| `PATCH /me` | CLI | Change own role; releases threads owned under the old role |
+| `DELETE /me` | CLI | Leave the project: revokes the token, releases owned threads, closes sockets |
+| `POST /projects/:p/invites` | CLI | Create another invite code |
+| `GET /projects/:p/members` | bridge, CLI | List active members |
+| `GET /projects/:p/threads?state=` | bridge, CLI | List threads with state and owners |
+| `GET /threads/:t?after=seq` | bridge, CLI | A thread and its log |
+| `POST /messages` | bridge | Submit a draft envelope; the relay sets id, sender and time, checks the transition, then appends |
 | `POST /threads/:t/claim`, `/hand-off` | bridge | Ownership changes |
-| `POST /messages` | bridge | Submit an envelope; the relay validates header and transition, then appends |
-| `POST /approvals` | bridge | Open a pending approval for a gate; returns approval id |
-| `POST /approvals/:a/decide` | CLI, bridge (elicitation) | Approve or reject with the one-time code |
 | `POST /threads/:t/resume` | CLI | Resume an escalated thread, optionally `to` a state |
-| `GET /ws` | bridge | WebSocket: push of new log entries; client acks by seq |
+| `POST /approvals` | bridge | Open a pending approval for a gate; returns the approval and its one-time code |
+| `GET /approvals/:a` | bridge | Status of one of the caller's approvals |
+| `POST /approvals/:a/decide` | CLI, bridge (elicitation) | Approve or reject with the one-time code |
+| `GET /ws?after=seq` | bridge | WebSocket: `hello`, then every entry after the cursor, then live entries; client acks by seq |
+
+Removing other members (rather than leaving) is Milestone 4, with token revocation by an admin.
 
 The bridge never needs to accept a connection. All traffic is outbound from the bridge or CLI to the relay.
 
@@ -167,22 +167,20 @@ Started by the agent as a stdio MCP server (`tool bridge`), so it lives as long 
 
 ```
 bridge/src/
-├─ main.ts                   # startBridge({ repoRoot }); reads repo and credential config
+├─ main.ts                   # createBridge(config) and runStdioBridge(repoRoot): wires everything below
+├─ config.ts                 # reads <repo>/.tool/config.json and the per-user token store
 ├─ mcp/
-│  ├─ server.ts              # registers only the tools allowed for this member's role
-│  ├─ tools/                 # one file per tool: input schema, pre-check, relay call, result
-│  ├─ descriptions.ts        # tool descriptions that tell the agent to plan and ask, not act
+│  ├─ tools.ts               # the role's tools: input schema, protocol pre-check, relay call, result
+│  │                         #   ending with the thread state and the tools allowed next
 │  └─ present.ts             # wraps incoming content as labelled, untrusted data
 ├─ relay-client/
-│  ├─ http.ts                # typed client generated from protocol/api.ts schemas
+│  ├─ http.ts                # typed client for the relay API (types from protocol/api.ts)
 │  └─ socket.ts              # WebSocket with reconnect, backoff and seq acks
 ├─ store/
-│  ├─ cache.ts               # local SQLite: thread snapshots, log copy, read marks
-│  └─ outbox.ts              # queued sends while the relay is unreachable; retried in order
-├─ approvals/
-│  ├─ elicit.ts              # MCP elicitation when the client supports it
-│  └─ fallback.ts            # show a one-time code by OS notification; wait for CLI decision
-├─ notify.ts                 # desktop or terminal notice on new inbox entries
+│  ├─ cache.ts               # local SQLite: threads, delivered entries and read marks, plans, outbox
+│  └─ outbox.ts              # queued sends while the relay is unreachable; sent in order on reconnect
+├─ approvals.ts              # MCP elicitation when supported, else one-time code by desktop notice
+├─ notify.ts                 # built-in desktop notice (Windows toast, macOS, Linux), bell fallback
 ├─ secrets.ts                # outgoing secret scan (Milestone 4)
 └─ codec/
    ├─ plain.ts               # Milestones 1–3: payload as JSON
