@@ -116,9 +116,10 @@ relay/src/
 │  ├─ approvals.ts           # pending → approved | rejected → consumed; bound to thread, gate, round
 │  └─ signing.ts             # relay sets and signs header.from; agents' values are discarded
 └─ db/
-   ├─ schema.sql
-   ├─ migrations/
-   └─ repos/                 # projects, members, threads, log, approvals, cursors
+   ├─ database.ts            # node:sqlite connection, pragmas, nested transactions (savepoints)
+   ├─ migrations.ts          # append-only schema versions, tracked in PRAGMA user_version
+   ├─ index.ts               # openStore(): migrate and wire every repository
+   └─ repos/                 # projects, members, invites, threads, log, approvals, cursors
 ```
 
 ### Relay data model
