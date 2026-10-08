@@ -12,7 +12,8 @@
     "build": "tsc -b packages/protocol packages/contract packages/relay packages/bridge packages/cli",
     "test": "vitest run --project unit",
     "test:e2e": "npm run build && vitest run --project e2e",
-    "test:all": "npm run build && vitest run"
+    "test:all": "npm run build && vitest run",
+    "trial:setup": "node scripts/trial-setup.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

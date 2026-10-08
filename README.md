@@ -83,6 +83,16 @@ node $tool approve <approval-id>
 
 It shows the exact plan, asks for the code, and asks you to confirm. It only works in an interactive terminal, so an agent cannot approve its own plan.
 
+## Try it: the Orders trial
+
+A ready-made scenario for a first real run with two Claude Code sessions: a small orders page with mock data and an orders API whose fields, filtering and paging don't match it.
+
+```sh
+npm run trial:setup          # copies both apps to ../ccs-trial and makes each a git repo
+```
+
+Then follow [examples/orders-trial/TRIAL.md](examples/orders-trial/TRIAL.md). It covers the setup on one or two machines, what to say to each agent, and a checklist of what to watch for.
+
 ## Commands
 
 | Command | What it does |
@@ -137,6 +147,7 @@ npm run build      # compile all packages (TypeScript project references)
 npm test           # unit and integration tests (fast, no build needed)
 npm run test:e2e   # build, then run the whole system as real processes
 npm run test:all   # both
+npm run trial:setup -- [dir] [--force]   # copy the Orders trial apps outside the repo
 ```
 
 Set `TOOL_NOTIFICATIONS=off` to silence the bridge's desktop notifications (CI, headless machines).
@@ -151,6 +162,8 @@ Set `TOOL_NOTIFICATIONS=off` to silence the bridge's desktop notifications (CI, 
 | `packages/cli` | The `tool` command |
 | `packages/contract` | Contract validation and diffing (Milestone 3; empty for now) |
 | `tests/e2e` | End-to-end test with real processes |
+| `examples/orders-trial` | Two sample apps and the guide for a real trial |
+| `scripts/` | `trial-setup.mjs`, which copies the trial apps outside the repo |
 | `doc/` | Product and technical spec, and the architecture document |
 
 ### Documentation

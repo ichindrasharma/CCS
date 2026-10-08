@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Orders</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; }
+      table { border-collapse: collapse; margin: 1rem 0; }
+      th, td { padding: 0.3rem 0.8rem; border-bottom: 1px solid #ddd; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>Orders</h1>
+    <main id="app">Loading…</main>
+    <script type="module">
+      import { render } from './src/OrdersPage.js';
+      render(document.getElementById('app'));
+    </script>
+  </body>
+</html>
