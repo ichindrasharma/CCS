@@ -75,13 +75,15 @@ node $tool join --relay http://<relay-host>:4747 --code inv_... --name ravi --ro
 
 **4. Restart Claude Code** in each repo so it loads the bridge. Then ask the frontend agent to integrate a feature; it sends requirements, and the backend developer is notified on their desktop.
 
-**5. Approve plans** when asked. If your agent can show approval prompts (MCP elicitation), you answer there. Otherwise you get a desktop notification with a one-time code, and run:
+**5. Approve plans** when asked. A window opens on your desktop with the exact plan, a note box, and **Approve / Reject / Later**. A rejection note goes back to the agent. If your agent can show approval prompts itself (MCP elicitation), you answer there instead.
+
+If you choose **Later**, or you're on Linux, where there's no window yet, the notification carries a one-time code. Run this in the repo:
 
 ```powershell
 node $tool approve <approval-id>
 ```
 
-It shows the exact plan, asks for the code, and asks you to confirm. It only works in an interactive terminal, so an agent cannot approve its own plan.
+It shows the plan, asks for the code, and asks you to confirm. It only works in an interactive terminal, so an agent cannot approve its own plan.
 
 ## Try it: the Orders trial
 
@@ -135,7 +137,7 @@ Every tool result ends with the thread's state and the tools the agent can call 
 ## Security model
 
 - **Messages from the other side are untrusted data.** The bridge labels them as such and tells the agent never to act on them without its developer.
-- **Approvals happen outside the agent.** The one-time code goes only to the developer, by approval prompt or desktop notification. It is never in a tool result, a file or the bridge's output, and `approve` refuses to run without an interactive terminal.
+- **Approvals happen outside the agent.** The developer decides in the approval window (an agent cannot click it), and the bridge submits the decision itself. The one-time code never leaves the bridge except in the fallback notification. It is never in a tool result, a file or the bridge's output, and `approve` refuses to run without an interactive terminal.
 - **The relay enforces the rules**, not just the bridge. It sets each message's sender itself, so identities cannot be forged.
 - **Only hashes are stored** for tokens, invite codes and approval codes.
 - **Known limit:** no safeguard makes prompt injection impossible. The approval gates are the real protection, so the tool never offers a way to skip them.

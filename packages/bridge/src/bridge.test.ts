@@ -4,9 +4,10 @@ import { ElicitRequestSchema, type CallToolResult } from '@modelcontextprotocol/
 import { TOOLS_BY_ROLE, type Role } from '@tool/protocol';
 import { buildRelay, openStore, type Store } from '@tool/relay';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BridgeConfig } from './config.js';
 import { createBridge, type Bridge } from './main.js';
+import { parseChoice, type ApprovalPrompt, type DialogChoice, type DialogRequest } from './approval-dialog.js';
 import type { Notice } from './notify.js';
 
 let store: Store;
@@ -55,11 +56,14 @@ async function agent(
   config: BridgeConfig,
   elicit?: (message: string) => { decision: string; note?: string },
   approvalWaitMs = 5000,
+  window: ApprovalPrompt | null = null,
 ): Promise<Agent> {
   const notices: Notice[] = [];
   const bridge = createBridge(config, {
     inMemoryCache: true,
     notifier: { notify: (n) => notices.push(n) },
+    // Never a real window in tests.
+    approvalPrompt: window,
     approvalWaitMs,
     approvalPollMs: 50,
   });
@@ -88,7 +92,7 @@ async function agent(
 }
 
 /** asha (frontend) creates the project; ravi (backend) joins. */
-async function team(options: { ravisElicitation?: boolean; approvalWaitMs?: number } = {}) {
+async function team(options: { ravisElicitation?: boolean; approvalWaitMs?: number; ravisWindow?: ApprovalPrompt } = {}) {
   const created = await post('/projects', { name: 'shop-app', memberName: 'asha', role: 'frontend' });
   const joined = await post('/join', { code: created.invite.code, name: 'ravi', role: 'backend' });
   const config = (member: { id: string; name: string; role: Role }, token: string): BridgeConfig => ({
@@ -103,8 +107,9 @@ async function team(options: { ravisElicitation?: boolean; approvalWaitMs?: numb
   const asha = await agent(config(created.member, created.token));
   const ravi = await agent(
     config(joined.member, joined.token),
-    options.ravisElicitation === false ? undefined : () => ({ decision: 'approve' }),
+    options.ravisElicitation === false || options.ravisWindow ? undefined : () => ({ decision: 'approve' }),
     options.approvalWaitMs,
+    options.ravisWindow ?? null,
   );
   return { asha, ravi, ashaToken: created.token as string, raviToken: joined.token as string };
 }
@@ -266,7 +271,7 @@ describe('guard rails', () => {
     const { asha } = await team();
     // Nothing listens on port 9; the subscription is never started.
     const notices: Notice[] = [];
-    const bridge = createBridge({ ...asha.config, relayUrl: 'http://127.0.0.1:9' }, { inMemoryCache: true, notifier: { notify: (n) => notices.push(n) } });
+    const bridge = createBridge({ ...asha.config, relayUrl: 'http://127.0.0.1:9' }, { inMemoryCache: true, notifier: { notify: (n) => notices.push(n) }, approvalPrompt: null });
     const client = new Client({ name: 'offline', version: '0' });
     const [c, s] = InMemoryTransport.createLinkedPair();
     await bridge.server.connect(s);
@@ -278,5 +283,77 @@ describe('guard rails', () => {
     })) as CallToolResult;
     expect((result.content[0] as { text: string }).text).toContain('queued');
     expect(bridge.cache.outbox()).toHaveLength(1);
+  });
+});
+
+describe('the approval window', () => {
+  /** A scripted window: records what it was shown and answers with the next choice. */
+  function scriptedWindow(choices: (DialogChoice | undefined)[]) {
+    const shown: DialogRequest[] = [];
+    let closed = 0;
+    const prompt: ApprovalPrompt = (request) => {
+      shown.push(request);
+      return { result: Promise.resolve(choices.shift()), close: () => void closed++ };
+    };
+    return { prompt, shown, closed: () => closed };
+  }
+
+  async function claimedWith(window: ApprovalPrompt, approvalWaitMs = 2000) {
+    const { asha, ravi, raviToken } = await team({ ravisWindow: window, approvalWaitMs });
+    const thread = threadIdIn(await asha.call('send_requirements', { title: 'Orders list', body: 'Needs a list.', contract: ordersContract }));
+    await ravi.call('claim_thread', { thread_id: thread });
+    return { asha, ravi, raviToken, thread };
+  }
+
+  it('shows the exact plan, and Approve passes the gate with no code typed', async () => {
+    const window = scriptedWindow([{ decision: 'approved' }]);
+    const { ravi, thread } = await claimedWith(window.prompt);
+    const result = await ravi.call('request_approval', { thread_id: thread, gate: 'plan', plan: 'Add a status filter.' });
+    expect(result).toMatch(/^Approved\. approval_id: apr_/);
+    expect(window.shown[0]).toMatchObject({ title: 'Approval needed: backend plan', plan: 'Add a status filter.' });
+    expect(window.shown[0]!.heading).toContain('"Orders list"');
+    // The fallback notice still went out, and the window was closed afterwards.
+    expect(ravi.notices.some((n) => n.title === 'Approval needed: backend plan')).toBe(true);
+    expect(window.closed()).toBe(1);
+  });
+
+  it('Reject sends the note back to the agent', async () => {
+    const window = scriptedWindow([{ decision: 'rejected', note: 'Reuse ORDER_STATUS.' }]);
+    const { ravi, thread } = await claimedWith(window.prompt);
+    const result = await ravi.call('request_approval', { thread_id: thread, gate: 'plan', plan: 'p' });
+    expect(result).toContain('rejected the plan');
+    expect(result).toContain('Reuse ORDER_STATUS.');
+  });
+
+  it('Later leaves the terminal command working', async () => {
+    const window = scriptedWindow([undefined]);
+    const { ravi, thread, raviToken } = await claimedWith(window.prompt);
+    const pending = ravi.call('request_approval', { thread_id: thread, gate: 'plan', plan: 'p' });
+    const notice = await waitFor(() => ravi.notices.find((n) => n.title.startsWith('Approval needed')));
+    const [, approvalId, code] = /approve (apr_[0-9a-f]+) --code ([A-Z0-9-]+)/.exec(notice.message)!;
+    await post(`/approvals/${approvalId}/decide`, { code, decision: 'approved' }, raviToken);
+    expect(await pending).toMatch(/^Approved\./);
+  });
+
+  it('a decision made in the terminal closes the window', async () => {
+    // A window nobody clicks: it stays open until closed.
+    const closed = vi.fn();
+    const neverClicked: ApprovalPrompt = () => ({ result: new Promise<DialogChoice | undefined>(() => {}), close: closed });
+    const { ravi, thread, raviToken } = await claimedWith(neverClicked);
+    const pending = ravi.call('request_approval', { thread_id: thread, gate: 'plan', plan: 'p' });
+    const notice = await waitFor(() => ravi.notices.find((n) => n.title.startsWith('Approval needed')));
+    const [, approvalId, code] = /approve (apr_[0-9a-f]+) --code ([A-Z0-9-]+)/.exec(notice.message)!;
+    await post(`/approvals/${approvalId}/decide`, { code, decision: 'rejected', note: 'from the terminal' }, raviToken);
+    expect(await pending).toContain('from the terminal');
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  it('parses what the window prints', () => {
+    expect(parseChoice('{"decision":"approved","note":""}')).toEqual({ decision: 'approved' });
+    expect(parseChoice('{"decision":"rejected","note":" Reuse it. "}')).toEqual({ decision: 'rejected', note: 'Reuse it.' });
+    expect(parseChoice('Reject\nToo broad')).toEqual({ decision: 'rejected', note: 'Too broad' });
+    expect(parseChoice('Later\n')).toBeUndefined();
+    expect(parseChoice('')).toBeUndefined();
+    expect(parseChoice('{"decision":"maybe"}')).toBeUndefined();
   });
 });

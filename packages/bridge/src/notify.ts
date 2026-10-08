@@ -7,8 +7,9 @@ export interface Notice {
 }
 
 /**
- * Reaches the developer outside the agent. Approval codes travel only through this channel,
- * never through a tool result, a file or stderr, because the agent can read all of those.
+ * Reaches the developer outside the agent. Approval codes travel only through this channel and
+ * the approval window, never through a tool result, a file or stderr, because the agent can read
+ * all of those.
  */
 export interface Notifier {
   notify(notice: Notice): void;
@@ -32,7 +33,8 @@ const MAC_NOTICE = 'display notification (system attribute "TOOL_NOTICE_MESSAGE"
 
 /**
  * Desktop notification on Windows, macOS and Linux; falls back to the terminal bell.
- * With NOTIFICATIONS_ENV=off it stays silent; approvals then need MCP elicitation.
+ * Toasts can be hidden by Focus Assist or notification settings, which is why approvals also open
+ * a window (approval-dialog.ts). With NOTIFICATIONS_ENV=off it stays silent.
  */
 export function desktopNotifier(): Notifier {
   if (process.env[NOTIFICATIONS_ENV] === 'off') return { notify() {} };

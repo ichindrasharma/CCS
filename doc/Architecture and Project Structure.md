@@ -179,7 +179,8 @@ bridge/src/
 ├─ store/
 │  ├─ cache.ts               # local SQLite: threads, delivered entries and read marks, plans, outbox
 │  └─ outbox.ts              # queued sends while the relay is unreachable; sent in order on reconnect
-├─ approvals.ts              # MCP elicitation when supported, else one-time code by desktop notice
+├─ approvals.ts              # asks in order: MCP elicitation, the approval window, then a code by notice
+├─ approval-dialog.ts        # Approve / Reject / Later window (Windows, macOS); reports only the click
 ├─ notify.ts                 # built-in desktop notice (Windows toast, macOS, Linux), bell fallback
 ├─ secrets.ts                # outgoing secret scan (Milestone 4)
 └─ codec/

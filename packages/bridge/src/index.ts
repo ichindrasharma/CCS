@@ -1,4 +1,5 @@
 // The local MCP server each agent launches. Layout: doc/Architecture and Project Structure.md, "Package: bridge".
+export { desktopApprovalPrompt, parseChoice, type ApprovalPrompt, type DialogChoice, type DialogRequest } from './approval-dialog.js';
 export { Approvals, type ApprovalOutcome } from './approvals.js';
 export {
   credentialKey,

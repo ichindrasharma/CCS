@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CLI_NAME, type ApprovalView, type Gate } from '@tool/protocol';
+import type { ApprovalPrompt } from './approval-dialog.js';
 import type { Notifier } from './notify.js';
 import { RelayError, type RelayClient } from './relay-client/http.js';
 import type { BridgeCache } from './store/cache.js';
@@ -16,9 +17,13 @@ export interface ApprovalOptions {
   notifier: Notifier;
   /** The MCP server, to ask the developer through elicitation when the client supports it. */
   server: Server;
-  /** How long one tool call waits for a CLI decision before returning `pending`. */
+  /** A window with Approve / Reject buttons on the developer's desktop, when available. */
+  prompt?: ApprovalPrompt;
+  /** How long one tool call waits for a decision before returning `pending`. */
   waitMs: number;
   pollMs: number;
+  /** The repo the developer must run the fallback command in; shown in the notice. */
+  repoRoot?: string;
 }
 
 const GATE_LABEL: Record<Gate, string> = {
@@ -29,33 +34,79 @@ const GATE_LABEL: Record<Gate, string> = {
 
 /**
  * Collects a developer's gate decision without letting the agent make it (spec, "Gate approvals").
- * The relay returns a one-time code to the bridge. The bridge either asks the developer directly
- * through MCP elicitation and submits the code itself, or shows the code by desktop notification
- * for the developer to type into `tool approve`. The code is never put in a tool result.
+ * The relay returns a one-time code to the bridge, which asks the developer, in order:
+ * 1. through MCP elicitation, in the agent's own UI, when the client supports it;
+ * 2. in a window on their desktop with Approve / Reject buttons;
+ * 3. by a notification carrying the code, for `approve` in a terminal (the fallback).
+ * In 1 and 2 the bridge submits the code itself. The code is never put in a tool result.
  */
 export class Approvals {
   constructor(private readonly o: ApprovalOptions) {}
+
+  /** One-time codes of approvals this bridge opened, so a resumed wait can show the window again. */
+  private readonly open = new Map<string, { code: string; gate: Gate; plan: string; title: string }>();
 
   async request(input: { threadId: string; gate: Gate; plan: string; title: string }): Promise<ApprovalOutcome> {
     const planHash = `sha256:${createHash('sha256').update(input.plan).digest('hex')}`;
     const { approval, code } = await this.o.relay.openApproval({ threadId: input.threadId, gate: input.gate, planHash });
     this.o.cache.savePlan({ approvalId: approval.id, threadId: input.threadId, gate: input.gate, plan: input.plan });
+    this.open.set(approval.id, { code, gate: input.gate, plan: input.plan, title: input.title });
 
     if (this.o.server.getClientCapabilities()?.elicitation) {
       const decided = await this.elicit(approval, code, input);
       if (decided) return decided;
     }
 
+    // The fallback, in case the window is dismissed or cannot be shown.
+    const where = this.o.repoRoot ? `In ${this.o.repoRoot}, run:` : 'In this repo, run:';
     this.o.notifier.notify({
       title: `Approval needed: ${GATE_LABEL[input.gate]}`,
-      message: `"${input.title}". Review the plan, then run: ${CLI_NAME} approve ${approval.id} --code ${code}`,
+      message: `"${input.title}". Code ${code}. ${where} ${CLI_NAME} approve ${approval.id} --code ${code}`,
     });
-    return this.wait(approval.id);
+    return this.decide(approval.id);
   }
 
-  /** Continues waiting on an approval requested earlier. */
+  /** Continues waiting on an approval requested earlier, showing the window again if this bridge opened it. */
   resume(approvalId: string): Promise<ApprovalOutcome> {
-    return this.wait(approvalId);
+    return this.decide(approvalId);
+  }
+
+  /** Waits for the first decision: from the window, or from the CLI (seen by polling the relay). */
+  private async decide(approvalId: string): Promise<ApprovalOutcome> {
+    const known = this.open.get(approvalId);
+    const window =
+      known && this.o.prompt
+        ? this.o.prompt({
+            title: `Approval needed: ${GATE_LABEL[known.gate]}`,
+            heading: `Your agent asks you to approve the ${GATE_LABEL[known.gate]} for "${known.title}". Read the plan, then decide.`,
+            plan: known.plan,
+          })
+        : undefined;
+
+    let stopWaiting = false;
+    const fromWindow = (window?.result ?? Promise.resolve(undefined)).then(async (choice) => {
+      if (!choice) return undefined;
+      try {
+        await this.o.relay.decide(approvalId, { code: known!.code, decision: choice.decision, ...(choice.note && { note: choice.note }) });
+      } catch (error) {
+        // Already decided from the CLI, or the relay is briefly unreachable: polling settles it.
+        if (!(error instanceof RelayError)) return undefined;
+      }
+      return this.status(approvalId);
+    });
+
+    try {
+      return await Promise.race([
+        this.wait(approvalId, () => stopWaiting),
+        // A dismissed window ("Later") leaves the CLI path open, so only a decision wins the race.
+        fromWindow.then((outcome) => outcome ?? new Promise<never>(() => {})),
+      ]);
+    } finally {
+      stopWaiting = true;
+      window?.close();
+      const outcome = await this.status(approvalId).catch(() => undefined);
+      if (outcome && outcome.status !== 'pending') this.open.delete(approvalId);
+    }
   }
 
   /** Returns undefined if the developer dismissed the prompt; the caller falls back to the CLI. */
@@ -91,11 +142,11 @@ export class Approvals {
     return this.status(approval.id);
   }
 
-  private async wait(approvalId: string): Promise<ApprovalOutcome> {
+  private async wait(approvalId: string, stopped: () => boolean = () => false): Promise<ApprovalOutcome> {
     const deadline = Date.now() + this.o.waitMs;
     for (;;) {
       const outcome = await this.status(approvalId);
-      if (outcome.status !== 'pending' || Date.now() >= deadline) return outcome;
+      if (outcome.status !== 'pending' || Date.now() >= deadline || stopped()) return outcome;
       await new Promise((resolve) => setTimeout(resolve, this.o.pollMs));
     }
   }

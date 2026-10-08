@@ -1,6 +1,8 @@
+import { dirname } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { BRIDGE_SERVER_NAME, type DeliveredEntry } from '@tool/protocol';
+import { desktopApprovalPrompt, type ApprovalPrompt } from './approval-dialog.js';
 import { Approvals } from './approvals.js';
 import { loadConfig, type BridgeConfig } from './config.js';
 import { registerTools } from './mcp/tools.js';
@@ -20,6 +22,8 @@ export interface BridgeOptions {
   /** Use an in-memory cache (tests). Default: `<dataDir>/cache.db`. */
   inMemoryCache?: boolean;
   notifier?: Notifier;
+  /** The Approve / Reject window. Default: the desktop window; `null` for none (tests). */
+  approvalPrompt?: ApprovalPrompt | null;
   approvalWaitMs?: number;
   approvalPollMs?: number;
 }
@@ -38,12 +42,15 @@ export function createBridge(config: BridgeConfig, options: BridgeOptions = {}):
   const relay = new RelayClient(config.relayUrl, config.token);
   const cache = new BridgeCache(options.inMemoryCache ? ':memory:' : config.dataDir);
   const server = new McpServer({ name: BRIDGE_SERVER_NAME, version: '0.0.0' }, { instructions: INSTRUCTIONS });
+  const prompt = options.approvalPrompt === undefined ? desktopApprovalPrompt() : options.approvalPrompt;
   const approvals = new Approvals({
     relay,
     cache,
     notifier,
     server: server.server,
+    ...(prompt && { prompt }),
     waitMs: options.approvalWaitMs ?? 10 * 60_000,
+    repoRoot: dirname(config.dataDir),
     pollMs: options.approvalPollMs ?? 2000,
   });
   const tools = registerTools(server, { config, relay, cache, approvals });

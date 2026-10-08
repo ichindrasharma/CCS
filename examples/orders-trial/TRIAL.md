@@ -53,7 +53,7 @@ You play both developers. Don't steer the agents beyond these lines; how they be
 7. When the frontend agent asks you to approve its **integration plan**, approve it if it maps the fields correctly.
 8. At the end, reload http://localhost:5173. The page should show real orders, and the filter and pager should work.
 
-**How approvals reach you:** if Claude Code shows the approval inside the session, answer there. Otherwise you get a desktop notification with a code; run `node <bin> approve <approval-id>` in a normal terminal in that repo. Note which one happened.
+**How approvals reach you:** a window titled "Approval needed" opens with the plan, a note box, and Approve / Reject / Later. To reject, type the note and click Reject. If you click Later, the notification has a code for `node <bin> approve <approval-id>` in a normal terminal in that repo.
 
 ## What to watch for
 
@@ -68,7 +68,7 @@ Write down what you see; the answers decide what we fix.
 - [ ] Did either agent call a tool in the wrong state? Did the error message get it back on track?
 
 **Approvals**
-- [ ] Approvals appeared: in the Claude Code session / as a desktop notification with a code (circle one).
+- [ ] Approvals appeared: in the Claude Code session / in the approval window / only as a notification with a code (circle one).
 - [ ] Was the plan you were asked to approve clear and complete?
 - [ ] After your rejection, did the agent actually change the plan?
 - [ ] Did any agent change code before its gate was approved?
